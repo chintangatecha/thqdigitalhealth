@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Task, TaskStatus, UserRole, GeneratedTask, TaskCategory } from '@/lib/types'
 import TaskCard from './TaskCard'
@@ -11,30 +11,53 @@ interface TaskManagerProps {
 }
 
 const STATUS_FILTERS: ('All' | TaskStatus)[] = ['All', 'Pending', 'In Progress', 'Done', 'Verified', 'Failed']
-const CATEGORIES: TaskCategory[] = ['SEO', 'Google Ads', 'Meta', 'GEO', 'Local']
-
-const EMPTY_FORM = { title: '', description: '', category: 'SEO' as TaskCategory, due_date: '' }
 
 export default function TaskManager({ role }: TaskManagerProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'All' | TaskStatus>('All')
   const [showGenerate, setShowGenerate] = useState(false)
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [form, setForm] = useState(EMPTY_FORM)
+  const [adding, setAdding] = useState(false)
+  const [newTitle, setNewTitle] = useState('')
   const [saving, setSaving] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const fetchTasks = useCallback(async () => {
     let query = supabase.from('tasks').select('*').order('created_at', { ascending: false })
-    if (role === 'agency') {
-      query = query.eq('approved', true)
-    }
+    if (role === 'agency') query = query.eq('approved', true)
     const { data } = await query
     setTasks(data || [])
     setLoading(false)
   }, [role])
 
   useEffect(() => { fetchTasks() }, [fetchTasks])
+
+  function openAdd() {
+    setAdding(true)
+    setNewTitle('')
+    setTimeout(() => inputRef.current?.focus(), 50)
+  }
+
+  function cancelAdd() {
+    setAdding(false)
+    setNewTitle('')
+  }
+
+  async function submitAdd(e?: React.FormEvent) {
+    e?.preventDefault()
+    const title = newTitle.trim()
+    if (!title) return cancelAdd()
+    setSaving(true)
+    const { data } = await supabase.from('tasks').insert({
+      title,
+      status: 'Pending',
+      approved: true,   // goes straight to agency
+    }).select()
+    if (data) setTasks(prev => [...data, ...prev])
+    setAdding(false)
+    setNewTitle('')
+    setSaving(false)
+  }
 
   async function handleUpdate(id: string, updates: Partial<Task>) {
     await supabase.from('tasks').update(updates).eq('id', id)
@@ -47,34 +70,15 @@ export default function TaskManager({ role }: TaskManagerProps) {
     setTasks(prev => prev.filter(t => t.id !== id))
   }
 
-  async function handleAddManual(e: React.FormEvent) {
-    e.preventDefault()
-    if (!form.title.trim()) return
-    setSaving(true)
-    const payload = {
-      title: form.title.trim(),
-      description: form.description.trim(),
-      category: form.category,
-      due_date: form.due_date || null,
-      status: 'Pending' as TaskStatus,
-      approved: false,
-    }
-    const { data } = await supabase.from('tasks').insert(payload).select()
-    if (data) setTasks(prev => [...data, ...prev])
-    setForm(EMPTY_FORM)
-    setShowAddForm(false)
-    setSaving(false)
-  }
-
   async function handleApproveGenerated(generated: GeneratedTask[]) {
-    const newTasks = generated.map(t => ({
+    const rows = generated.map(t => ({
       title: t.title,
       description: t.description,
       category: t.category,
       status: 'Pending' as TaskStatus,
       approved: false,
     }))
-    const { data } = await supabase.from('tasks').insert(newTasks).select()
+    const { data } = await supabase.from('tasks').insert(rows).select()
     if (data) setTasks(prev => [...data, ...prev])
     setShowGenerate(false)
   }
@@ -92,12 +96,11 @@ export default function TaskManager({ role }: TaskManagerProps) {
       }),
     })
     const data = await res.json()
-    const updates = {
+    await handleUpdate(task.id, {
       ai_verification_result: data.result,
       ai_verification_reason: data.reason,
-      status: data.result === 'Pass' ? 'Verified' as TaskStatus : task.status,
-    }
-    await handleUpdate(task.id, updates)
+      status: data.result === 'Pass' ? 'Verified' : task.status,
+    })
   }
 
   const filtered = filter === 'All' ? tasks : tasks.filter(t => t.status === filter)
@@ -115,11 +118,16 @@ export default function TaskManager({ role }: TaskManagerProps) {
       <div className="quadrant-header">
         <span className="quadrant-title">Task Manager</span>
         {role === 'admin' && (
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-            <button className="btn-secondary btn-sm" onClick={() => { setShowAddForm(v => !v); setShowGenerate(false) }}>
-              + Add Task
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button
+              className="btn-secondary btn-sm"
+              onClick={openAdd}
+              style={{ fontSize: '18px', lineHeight: 1, padding: '3px 11px', fontWeight: 400 }}
+              title="Add task"
+            >
+              +
             </button>
-            <button className="btn-primary btn-sm" onClick={() => { setShowGenerate(true); setShowAddForm(false) }}>
+            <button className="btn-primary btn-sm" onClick={() => setShowGenerate(true)}>
               ✦ Generate with AI
             </button>
           </div>
@@ -127,65 +135,24 @@ export default function TaskManager({ role }: TaskManagerProps) {
       </div>
 
       <div className="quadrant-body">
-        {/* Inline add task form */}
-        {showAddForm && role === 'admin' && (
-          <form onSubmit={handleAddManual} style={{
-            background: '#1a1a1a',
-            border: '1px solid var(--accent)',
-            borderRadius: '10px',
-            padding: '14px',
-            marginBottom: '14px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '10px',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--accent)' }}>New Task</span>
-              <button type="button" className="btn-ghost" onClick={() => setShowAddForm(false)} style={{ fontSize: '16px', padding: '2px 6px' }}>✕</button>
-            </div>
-            <div>
-              <label>Task Title *</label>
-              <input
-                type="text"
-                value={form.title}
-                onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                placeholder="e.g. Update meta descriptions for VIC decking range"
-                autoFocus
-                required
-              />
-            </div>
-            <div>
-              <label>Description</label>
-              <textarea
-                rows={3}
-                value={form.description}
-                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                placeholder="Detailed instructions for the agency..."
-                style={{ resize: 'vertical', fontSize: '13px' }}
-              />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <div>
-                <label>Category</label>
-                <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value as TaskCategory }))}>
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label>Due Date</label>
-                <input
-                  type="date"
-                  value={form.due_date}
-                  onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
-                />
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-              <button type="button" className="btn-secondary btn-sm" onClick={() => setShowAddForm(false)}>Cancel</button>
-              <button type="submit" className="btn-primary btn-sm" disabled={saving || !form.title.trim()}>
-                {saving ? 'Saving...' : 'Save Task'}
-              </button>
-            </div>
+
+        {/* Inline quick-add input */}
+        {adding && (
+          <form onSubmit={submitAdd} style={{ marginBottom: '12px', display: 'flex', gap: '6px' }}>
+            <input
+              ref={inputRef}
+              type="text"
+              value={newTitle}
+              onChange={e => setNewTitle(e.target.value)}
+              onKeyDown={e => e.key === 'Escape' && cancelAdd()}
+              placeholder="Task title — press Enter to save, Esc to cancel"
+              style={{ flex: 1 }}
+              disabled={saving}
+            />
+            <button type="submit" className="btn-primary btn-sm" disabled={saving || !newTitle.trim()}>
+              {saving ? '…' : 'Add'}
+            </button>
+            <button type="button" className="btn-secondary btn-sm" onClick={cancelAdd}>✕</button>
           </form>
         )}
 
@@ -215,7 +182,7 @@ export default function TaskManager({ role }: TaskManagerProps) {
             </p>
             {role === 'admin' && filter === 'All' && (
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '12px' }}>
-                <button className="btn-secondary btn-sm" onClick={() => setShowAddForm(true)}>+ Add Task</button>
+                <button className="btn-secondary btn-sm" onClick={openAdd}>+ Add Task</button>
                 <button className="btn-primary btn-sm" onClick={() => setShowGenerate(true)}>✦ Generate with AI</button>
               </div>
             )}

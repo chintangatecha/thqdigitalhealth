@@ -44,7 +44,7 @@ export default function TaskCard({ task, role, onUpdate, onDelete, onVerify }: T
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '6px' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center', marginBottom: '5px' }}>
-            <StatusBadge category={localTask.category} />
+            {localTask.category && <StatusBadge category={localTask.category} />}
             <StatusBadge status={localTask.status} />
             {localTask.ai_verification_result && !localTask.admin_override && (
               <StatusBadge verification={localTask.ai_verification_result} />
