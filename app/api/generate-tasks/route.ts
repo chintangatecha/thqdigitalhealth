@@ -70,14 +70,16 @@ Rules:
 - Never suggest tasks that appear in the saved context as done or irrelevant
 - Mix categories: include SEO, Paid, Local, GEO/AI tasks proportionally based on what needs work
 
-Each task must follow the THQ SEO rulebook precisely.
+TASK FORMAT — keep tasks small and completable in under 2 hours:
+- title: One clear action headline, max 10 words (e.g. "Update meta description for Teak Decking Melbourne page")
+- description: Exactly 2-3 sentences. Sentence 1: what to do. Sentence 2: where/which specific page or product. Sentence 3: the specific outcome or rule to follow (e.g. include 1800 084 700, target keyword X, max 155 chars). No bullet points. No lengthy explanations.
 
 Return ONLY a valid JSON object in this exact format (no markdown, no explanation):
 {
   "tasks": [
     {
-      "title": "Short actionable title",
-      "description": "Detailed specific description of exactly what needs to be done, including specific product names, URLs, keywords, or geo targets",
+      "title": "One clear action headline max 10 words",
+      "description": "What to do. Which specific page or product. The specific rule or outcome to achieve.",
       "category": "SEO"
     }
   ]
