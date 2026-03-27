@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Metric, Task } from '@/lib/types'
 
-export default function AnalyticsSummary() {
+export default function AnalyticsSummary({ embedded }: { embedded?: boolean }) {
   const [metrics, setMetrics] = useState<Metric[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
@@ -22,11 +22,10 @@ export default function AnalyticsSummary() {
   useEffect(() => { fetchData() }, [fetchData])
 
   if (loading) {
+    if (embedded) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px' }}><span className="spinner" style={{ width: '24px', height: '24px' }} /></div>
     return (
       <>
-        <div className="quadrant-header">
-          <span className="quadrant-title">Analytics Summary</span>
-        </div>
+        <div className="quadrant-header"><span className="quadrant-title">Analytics Summary</span></div>
         <div className="quadrant-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <span className="spinner" style={{ width: '24px', height: '24px' }} />
         </div>
@@ -74,14 +73,8 @@ export default function AnalyticsSummary() {
     count: tasks.filter(t => t.category === cat).length,
   })).filter(c => c.count > 0).sort((a, b) => b.count - a.count)
 
-  return (
-    <>
-      <div className="quadrant-header">
-        <span className="quadrant-title">Analytics Summary</span>
-        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Admin only</span>
-      </div>
-
-      <div className="quadrant-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+  const content = (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
 
         {/* Data coverage bar */}
         <div>
@@ -218,6 +211,17 @@ export default function AnalyticsSummary() {
         )}
 
       </div>
+  )
+
+  if (embedded) return content
+
+  return (
+    <>
+      <div className="quadrant-header">
+        <span className="quadrant-title">Analytics Summary</span>
+        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Admin only</span>
+      </div>
+      <div className="quadrant-body">{content}</div>
     </>
   )
 }
